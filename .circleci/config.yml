@@ -41,7 +41,7 @@ jobs:
       # run tests!
       - run: gradle ili2pgJar
 
-      # store artifacts..
+      # store artifacts
       - store_artifacts:
           path: ~/repo/build/libs/ 
 
