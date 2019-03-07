@@ -3,7 +3,9 @@ package ch.ehi.ili2db.mapping;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import ch.ehi.ili2db.fromili.TransferFromIli;
 import ch.ehi.sqlgen.repository.DbTableName;
 import ch.interlis.ili2c.metamodel.AbstractClassDef;
 import ch.interlis.ili2c.metamodel.AssociationDef;
@@ -120,9 +122,6 @@ public class ViewableWrapper {
 	public void setMultipleTypes(boolean multipleTypes) {
 		incMultipleTypes=multipleTypes;
 	}
-	public boolean isAssocLightweight() {
-		return (viewable instanceof AssociationDef) && ((AssociationDef)viewable).isLightweight();
-	}
 	public ViewableWrapper getExtending() {
 		return base;
 	}
@@ -144,7 +143,7 @@ public class ViewableWrapper {
 	public boolean isSecondaryTable() {
 		return mainTable!=null;
 	}
-	public boolean containsAttributes(HashSet<AttributeDef> iomObjectAttrs) {
+	public boolean containsAttributes(Set<AttributeDef> iomObjectAttrs) {
 		for(ColumnWrapper ele:attrv){
 			if(ele.getViewableTransferElement().obj instanceof AttributeDef){
 				if(iomObjectAttrs.contains(ele.getViewableTransferElement().obj)){
@@ -154,5 +153,4 @@ public class ViewableWrapper {
 		}
 		return false;
 	}
-
 }

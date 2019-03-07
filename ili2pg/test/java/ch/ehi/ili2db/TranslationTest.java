@@ -99,6 +99,20 @@ public class TranslationTest {
 					ResultSet rs=stmt.getResultSet();
 					Assert.assertFalse(rs.next());
 				}
+                {
+                    // t_ili2db_attrname
+                    String [][] expectedValues=new String[][] {
+                        {"EnumOkA.TopicA.ClassA.attrA",  "attra", "classa", null}, 
+                    };
+                    Ili2dbAssert.assertAttrNameTable(jdbcConnection, expectedValues, DBSCHEMA);
+                }
+                {
+                    // t_ili2db_trafo
+                    String [][] expectedValues=new String[][] {
+                        {"EnumOkA.TopicA.ClassA", "ch.ehi.ili2db.inheritance", "newClass"},
+                    };
+                    Ili2dbAssert.assertTrafoTable(jdbcConnection,expectedValues, DBSCHEMA);
+                }
 		    }
 		}finally{
 			if(jdbcConnection!=null){
@@ -129,6 +143,8 @@ public class TranslationTest {
 				config.setMultilingualTrafo(null);
 				config.setInheritanceTrafo(null);
 				config.setIli1Translation("ModelBsimple10=ModelAsimple10");
+	            config.setDefaultSrsAuthority("EPSG");
+	            config.setDefaultSrsCode("21781");
 				Ili2db.readSettingsFromDb(config);
 				Ili2db.run(config,null);
 				
@@ -145,6 +161,26 @@ public class TranslationTest {
 					ResultSet rs=stmt.getResultSet();
 					Assert.assertFalse(rs.next());
 				}
+	            {
+	                // t_ili2db_attrname
+	                String [][] expectedValues=new String[][] {
+	                    {"ModelAsimple10.TopicA.ClassA3.geomA",  "geoma", "classa3", null},   
+	                    {"ModelAsimple10.TopicA.ClassA2.geomA",   "geoma", "classa2", null},
+	                    {"ModelAsimple10.TopicA.ClassA.attrA",    "attra", "classa", null},
+	                };
+	                Ili2dbAssert.assertAttrNameTable(jdbcConnection, expectedValues, DBSCHEMA);
+	            }
+	            {
+	                // t_ili2db_trafo
+	                String [][] expectedValues=new String[][] {
+	                    {"ModelAsimple10.TopicA.ClassA",  "ch.ehi.ili2db.inheritance", "newClass"},
+	                    {"ModelAsimple10.TopicA.ClassA2", "ch.ehi.ili2db.inheritance", "newClass"},
+	                    {"ModelAsimple10.TopicA.ClassA3", "ch.ehi.ili2db.inheritance", "newClass"},
+	                    
+	                };
+	                Ili2dbAssert.assertTrafoTable(jdbcConnection,expectedValues, DBSCHEMA);
+	            }
+				
 	        }
 		}finally{
 			if(jdbcConnection!=null){
@@ -176,6 +212,8 @@ public class TranslationTest {
 				config.setInheritanceTrafo(null);
                 Ili2db.setSkipPolygonBuilding(config);
 				config.setIli1Translation("ModelBsimple10=ModelAsimple10");
+	            config.setDefaultSrsAuthority("EPSG");
+	            config.setDefaultSrsCode("21781");
 				Ili2db.readSettingsFromDb(config);
 				Ili2db.run(config,null);
 				// class[a2] is imported
@@ -191,6 +229,26 @@ public class TranslationTest {
 					ResultSet rs=stmt.getResultSet();
 					Assert.assertFalse(rs.next());
 				}
+                {
+                    // t_ili2db_attrname
+                    String [][] expectedValues=new String[][] {
+                        {"ModelAsimple10.TopicA.ClassA2.geomA._geom", "_geom", "classa2_geoma", null}, 
+                        {"ModelAsimple10.TopicA.ClassA3.geomA",   "geoma", "classa3", null},   
+                        {"ModelAsimple10.TopicA.ClassA3.geomA._geom", "_geom", "classa3_geoma", null}, 
+                        {"ModelAsimple10.TopicA.ClassA2.geomA._ref", "_ref", "classa2_geoma", null}, 
+                        {"ModelAsimple10.TopicA.ClassA.attrA", "attra", "classa", null}
+                    };
+                    Ili2dbAssert.assertAttrNameTable(jdbcConnection, expectedValues, DBSCHEMA);
+                }
+                {
+                    // t_ili2db_trafo
+                    String [][] expectedValues=new String[][] {
+                        {"ModelAsimple10.TopicA.ClassA3", "ch.ehi.ili2db.inheritance", "newClass"},
+                        {"ModelAsimple10.TopicA.ClassA2", "ch.ehi.ili2db.inheritance", "newClass"},
+                        {"ModelAsimple10.TopicA.ClassA",  "ch.ehi.ili2db.inheritance", "newClass"}
+                    };
+                    Ili2dbAssert.assertTrafoTable(jdbcConnection,expectedValues, DBSCHEMA);
+                }
 		    }
 		}finally{
 			if(jdbcConnection!=null){
@@ -284,7 +342,7 @@ public class TranslationTest {
 	        		dburl, dbuser, dbpwd);
 	        Statement stmt=jdbcConnection.createStatement();
 			
-			EhiLogger.getInstance().setTraceFilter(false);
+			//EhiLogger.getInstance().setTraceFilter(false);
 			File data=new File(TEST_OUT,"EnumOka-out.xtf");
 			Config config=initConfig(data.getPath(),DBSCHEMA,data.getPath()+".log");
 			config.setFunction(Config.FC_EXPORT);
@@ -367,6 +425,8 @@ public class TranslationTest {
 	    		config.setInheritanceTrafo(null);
 	    		config.setIli1Translation("ModelBsimple10=ModelAsimple10");
 	    		config.setDatasetName("ModelAsimple10");
+	            config.setDefaultSrsAuthority("EPSG");
+	            config.setDefaultSrsCode("21781");
 	    		Ili2db.readSettingsFromDb(config);
 	    		Ili2db.run(config,null);
 	        }
@@ -654,6 +714,8 @@ public class TranslationTest {
 	    		config.setInheritanceTrafo(null);
 	    		config.setIli1Translation("ModelBsimple10=ModelAsimple10");
 	    		config.setDatasetName("ModelAsimple10");
+	            config.setDefaultSrsAuthority("EPSG");
+	            config.setDefaultSrsCode("21781");
 	    		Ili2db.readSettingsFromDb(config);
 	    		Ili2db.run(config,null);
 	        }
@@ -705,7 +767,7 @@ public class TranslationTest {
 			importItf10lineTable();
 		}
 		try{
-			EhiLogger.getInstance().setTraceFilter(false);
+			//EhiLogger.getInstance().setTraceFilter(false);
 	        Class driverClass = Class.forName("org.postgresql.Driver");
 	        jdbcConnection = DriverManager.getConnection(dburl, dbuser, dbpwd);
 	        Statement stmt=jdbcConnection.createStatement();

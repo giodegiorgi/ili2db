@@ -93,6 +93,62 @@ public class Datatypes23Test {
 			config.setInheritanceTrafo(null);
 			//Ili2db.readSettingsFromDb(config);
 			Ili2db.run(config,null);
+            {
+                // t_ili2db_attrname
+                String [][] expectedValues=new String[][] {
+                    {"Datatypes23.Topic.SimpleSurface3.surface3d", "surface3d", "simplesurface3", null},
+                    {"Datatypes23.Topic.ClassAttr.vertAlignment", "vertalignment", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aTime", "atime", "classattr", null},
+                    {"Datatypes23.Topic.SimpleSurface2.surface2d", "surface2d", "simplesurface2", null},
+                    {"Datatypes23.Topic.Surface2.surfacearcs2d", "surfacearcs2d", "surface2", null},
+                    {"Datatypes23.Topic.ClassAttr.aUuid", "auuid", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aClass", "aclass", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.uritext", "uritext", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.horizAlignment", "horizalignment", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aI32id", "ai32id", "classattr", null},
+                    {"Datatypes23.Topic.Line3.straightsarcs3d", "straightsarcs3d", "line3", null},
+                    {"Datatypes23.Topic.ClassAttr.mtextLimited", "mtextlimited", "classattr", null},
+                    {"Datatypes23.Topic.SimpleLine3.straights3d", "straights3d", "simpleline3", null},
+                    {"Datatypes23.Topic.ClassAttr.aAttribute", "aattribute", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aBoolean", "aboolean", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aDateTime", "adatetime", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.textLimited", "textlimited", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.nametext", "nametext", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aufzaehlung", "aufzaehlung", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.xmlbox", "xmlbox", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aStandardid", "astandardid", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.aDate", "adate", "classattr", null},
+                    {"Datatypes23.Topic.ClassKoord3.hcoord", "hcoord", "classkoord3", null},
+                    {"Datatypes23.Topic.ClassKoord2.lcoord", "lcoord", "classkoord2", null},
+                    {"Datatypes23.Topic.ClassAttr.numericInt", "numericint", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.numericDec", "numericdec", "classattr", null},
+                    {"Datatypes23.Topic.SimpleLine2.straights2d", "straights2d", "simpleline2", null},
+                    {"Datatypes23.Topic.Line2.straightsarcs2d", "straightsarcs2d", "line2", null},
+                    {"Datatypes23.Topic.ClassAttr.textUnlimited", "textunlimited", "classattr", null},
+                    {"Datatypes23.Topic.ClassAttr.binbox", "binbox", "classattr", null},
+                    {"Datatypes23.Topic.Surface3.surfacearcs3d", "surfacearcs3d", "surface3", null},
+                    {"Datatypes23.Topic.ClassAttr.mtextUnlimited", "mtextunlimited", "classattr", null}
+                };
+                Ili2dbAssert.assertAttrNameTable(jdbcConnection,expectedValues, DBSCHEMA);
+                
+            }
+            {
+                // t_ili2db_trafo
+                String [][] expectedValues=new String[][] {
+                    {"Datatypes23.Topic.SimpleLine3", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.SimpleSurface3", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.Surface2", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.SimpleSurface2", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.Surface3", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.ClassAttr", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.ClassKoord3", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.Line3", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.ClassKoord2", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.SimpleLine2", "ch.ehi.ili2db.inheritance", "newClass"},
+                    {"Datatypes23.Topic.Line2", "ch.ehi.ili2db.inheritance", "newClass"}
+                };
+                Ili2dbAssert.assertTrafoTable(jdbcConnection,expectedValues, DBSCHEMA);
+            }
 		}catch(SQLException e) {
 			throw new IoxException(e);
 		}finally{
@@ -121,12 +177,7 @@ public class Datatypes23Test {
 			config.setMultilingualTrafo(null);
 			config.setInheritanceTrafo(null);
 			//Ili2db.readSettingsFromDb(config);
-			try{
-				Ili2db.run(config,null);
-			}catch(Exception ex){
-				EhiLogger.logError(ex);
-				Assert.fail();
-			}
+            Ili2db.run(config,null);
 			String stmtTxt="SELECT * FROM "+DBSCHEMA+".classattr ORDER BY t_id ASC";
 			{
 				 Assert.assertTrue(stmt.execute(stmtTxt));
@@ -196,12 +247,7 @@ public class Datatypes23Test {
 			config.setMultilingualTrafo(null);
 			config.setInheritanceTrafo(null);
 			//Ili2db.readSettingsFromDb(config);
-			try{
-				Ili2db.run(config,null);
-			}catch(Exception ex){
-				EhiLogger.logError(ex);
-				Assert.fail();
-			}
+            Ili2db.run(config,null);
 			// imported polyline
 			{
 				ResultSet rs = stmt.executeQuery("SELECT st_asewkt(straightsarcs2d) FROM datatypes23.line2 WHERE t_ili_tid = 'Line2.0';");
@@ -216,7 +262,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;COMPOUNDCURVE(CIRCULARSTRING(2460001 1045001,2460005 1045004,2460006 1045006),(2460006 1045006,2460010 1045010))", rs.getObject(1));
+				  	assertEquals("SRID=2056;COMPOUNDCURVE(CIRCULARSTRING(2460001 1045001,2460005 1045004,2460006 1045006),(2460006 1045006,2460010 1045010))", rs.getObject(1));
 				}
 			}
 			{
@@ -224,7 +270,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;COMPOUNDCURVE(CIRCULARSTRING(2460001 1045001 300,2460005 1045004 0,2460006 1045006 300),(2460006 1045006 300,2460010 1045010 300))", rs.getObject(1));
+				  	assertEquals("SRID=2056;COMPOUNDCURVE(CIRCULARSTRING(2460001 1045001 300,2460005 1045004 0,2460006 1045006 300),(2460006 1045006 300,2460010 1045010 300))", rs.getObject(1));
 				}
 			}
 			{
@@ -240,7 +286,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;COMPOUNDCURVE((2460001 1045001,2460010 1045010))", rs.getObject(1));
+				  	assertEquals("SRID=2056;COMPOUNDCURVE((2460001 1045001,2460010 1045010))", rs.getObject(1));
 				}
 			}
 			{
@@ -248,7 +294,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;COMPOUNDCURVE((2460001 1045001 300,2460010 1045010 300))", rs.getObject(1));
+				  	assertEquals("SRID=2056;COMPOUNDCURVE((2460001 1045001 300,2460010 1045010 300))", rs.getObject(1));
 				}
 			}
 		}catch(SQLException e) {
@@ -280,12 +326,7 @@ public class Datatypes23Test {
 			config.setMultilingualTrafo(null);
 			config.setInheritanceTrafo(null);
 			//Ili2db.readSettingsFromDb(config);
-			try{
-				Ili2db.run(config,null);
-			}catch(Exception ex){
-				EhiLogger.logError(ex);
-				Assert.fail();
-			}
+            Ili2db.run(config,null);
 			// imported surface
 			{
 				ResultSet rs = stmt.executeQuery("SELECT st_asewkt(surfacearcs2d) FROM datatypes23.surface2 WHERE t_ili_tid = 'Surface2.0';");
@@ -300,7 +341,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;CURVEPOLYGON(COMPOUNDCURVE((2460001 1045001,2460020 1045015),CIRCULARSTRING(2460020 1045015,2460010 1045018,2460001 1045015),(2460001 1045015,2460001 1045001)),COMPOUNDCURVE((2460005 1045005,2460010 1045010),CIRCULARSTRING(2460010 1045010,2460007 1045009,2460005 1045010),(2460005 1045010,2460005 1045005)))", rs.getObject(1));//2460001 1045001
+				  	assertEquals("SRID=2056;CURVEPOLYGON(COMPOUNDCURVE((2460001 1045001,2460020 1045015),CIRCULARSTRING(2460020 1045015,2460010 1045018,2460001 1045015),(2460001 1045015,2460001 1045001)),COMPOUNDCURVE((2460005 1045005,2460010 1045010),CIRCULARSTRING(2460010 1045010,2460007 1045009,2460005 1045010),(2460005 1045010,2460005 1045005)))", rs.getObject(1));//2460001 1045001
 				}
 			}
 			{
@@ -316,7 +357,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;CURVEPOLYGON(COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
+				  	assertEquals("SRID=2056;CURVEPOLYGON(COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
 				}
 			}
 			{
@@ -324,7 +365,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;CURVEPOLYGON(COMPOUNDCURVE((2460001 1045001,2460020 1045015,2460001 1045015,2460001 1045001)),COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
+				  	assertEquals("SRID=2056;CURVEPOLYGON(COMPOUNDCURVE((2460001 1045001,2460020 1045015,2460001 1045015,2460001 1045001)),COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
 				}
 			}
 			{
@@ -332,7 +373,7 @@ public class Datatypes23Test {
 				ResultSetMetaData rsmd=rs.getMetaData();
 				assertEquals(1, rsmd.getColumnCount());
 				while(rs.next()){
-				  	assertEquals("SRID=21781;CURVEPOLYGON(COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
+				  	assertEquals("SRID=2056;CURVEPOLYGON(COMPOUNDCURVE((2460005 1045005,2460010 1045010,2460005 1045010,2460005 1045005)))", rs.getObject(1));
 				}
 			}
 		}catch(SQLException e) {

@@ -63,7 +63,7 @@ public class ExtendedModel23Test {
 	@Test
 	public void importXtf() throws Exception
 	{
-		EhiLogger.getInstance().setTraceFilter(false);
+		//EhiLogger.getInstance().setTraceFilter(false);
 		Connection jdbcConnection=null;
 		try{
 		    Class driverClass = Class.forName("org.postgresql.Driver");
@@ -87,8 +87,6 @@ public class ExtendedModel23Test {
 		    		Ili2db.run(config,null);
 				}
 			}
-		}catch(Exception e) {
-			throw new IoxException(e);
 		}finally{
 			if(jdbcConnection!=null){
 				jdbcConnection.close();
@@ -137,8 +135,6 @@ public class ExtendedModel23Test {
 				 Assert.assertEquals("1.1", obj0.getattrvalue("wert"));
 				 Assert.assertEquals("34", obj0.getattrobj("ap1",0).getobjectrefoid());
 			 }
-		}catch(Exception e) {
-			throw new IoxException(e);
 		}finally{
 			if(jdbcConnection!=null){
 				jdbcConnection.close();

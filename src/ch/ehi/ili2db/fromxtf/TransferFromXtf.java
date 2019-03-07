@@ -136,7 +136,7 @@ public class TransferFromXtf {
 	private TranslateToOrigin languageFilter=null;
 	/** list of not yet processed struct values
 	 */
-	private ArrayList structQueue=null;
+	private ArrayList<AbstractStructWrapper> structQueue=null;
     private Integer defaultCrsCode=null;
     private String srsModelAssignment=null;
     private Map<Element,Element> crsFilter=null;
@@ -165,7 +165,9 @@ public class TransferFromXtf {
 		if(colT_ID==null){
 			colT_ID=DbNames.T_ID_COL;
 		}
-        defaultCrsCode=Integer.parseInt(config.getDefaultSrsCode());
+		if(config.getDefaultSrsCode()!=null) {
+	        defaultCrsCode=Integer.parseInt(config.getDefaultSrsCode());
+		}
         srsModelAssignment=config.getSrsModelAssignment();
 		createGenericStructRef=config.STRUCT_MAPPING_GENERICREF.equals(config.getStructMapping());
 		readIliTid=config.TID_HANDLING_PROPERTY.equals(config.getTidHandling());
@@ -231,7 +233,7 @@ public class TransferFromXtf {
 		}
 		isItfReader=reader instanceof ItfReader;
 		unknownTypev=new HashSet();
-		structQueue=new ArrayList();
+		structQueue=new ArrayList<AbstractStructWrapper>();
 		boolean surfaceAsPolyline=true;
 		boolean ignoreUnresolvedReferences=config.isSkipReferenceErrors();
 
@@ -246,7 +248,7 @@ public class TransferFromXtf {
 			long objCount=0;
 			boolean referrs=false;
 			
-			recConv=new FromXtfRecordConverter(td,ili2sqlName,tag2class,config,idGen,geomConv,conn,dbusr,isItfReader,oidPool,trafoConfig,class2wrapper,datasetName);
+			recConv=new FromXtfRecordConverter(td,ili2sqlName,tag2class,config,idGen,geomConv,conn,dbusr,isItfReader,oidPool,trafoConfig,class2wrapper,datasetName,schema);
 			
 			if(functionCode==Config.FC_DELETE || functionCode==Config.FC_REPLACE){
 				if(datasetName==null) {
@@ -1052,7 +1054,7 @@ public class TransferFromXtf {
 			throw ex;
 		}
 		while(!structQueue.isEmpty()){
-			StructWrapper struct=(StructWrapper)structQueue.remove(0); // get front
+			AbstractStructWrapper struct=structQueue.remove(0); // get front
 			try{
 				writeObject(datasetName,basketSqlId,genericDomains,struct.getStruct(),struct,objStat);
 			}catch(ConverterException ex){
@@ -1378,7 +1380,7 @@ public class TransferFromXtf {
 
 	/** if structEle==null, iomObj is an object. If structEle!=null iomObj is a struct value.
 	 */
-	private void writeObject(String datasetName,long basketSqlId,Map<String,String> genericDomains,IomObject iomObj,StructWrapper structEle,Map<String, ClassStat> objStat)
+	private void writeObject(String datasetName,long basketSqlId,Map<String,String> genericDomains,IomObject iomObj,AbstractStructWrapper structEle,Map<String, ClassStat> objStat)
 		throws java.sql.SQLException,ConverterException
 	{
 		String tag=iomObj.getobjecttag();
@@ -1443,7 +1445,7 @@ public class TransferFromXtf {
 			 }
 			for(ViewableWrapper secondary:aclass.getSecondaryTables()){
 				// secondarytable contains attributes of this class?
-				if(secondary.containsAttributes(recConv.getIomObjectAttrs(aclass1))){
+				if(secondary.containsAttributes(recConv.getIomObjectAttrs(aclass1).keySet())){
 					String insert = getInsertStmt(updateObj,aclass1,secondary,structEle);
 					EhiLogger.traceBackendCmd(insert);
 					PreparedStatement ps = conn.prepareStatement(insert);
@@ -1458,6 +1460,24 @@ public class TransferFromXtf {
 				
 			}
 			aclass=aclass.getExtending();
+		 }
+		 // add StructWrapper around embedded associations that are mapped to a link table
+		 for(Iterator roleIt=aclass0.getAttributesAndRoles2();roleIt.hasNext();) {
+		     ViewableTransferElement roleEle=(ViewableTransferElement) roleIt.next();
+		     if(roleEle.embedded && roleEle.obj instanceof RoleDef) {
+		         RoleDef role=(RoleDef)roleEle.obj;
+                 AssociationDef roleOwner = (AssociationDef) role.getContainer();
+                 if(roleOwner.getDerivedFrom()==null && !TransferFromIli.isLightweightAssociation(roleOwner)){
+                     IomObject refObj=iomObj.getattrobj(role.getName(), 0);
+                     if(refObj!=null && refObj.getobjectrefoid()!=null) {
+                         //EhiLogger.logState("refObj "+refObj);
+                         if(refObj.getobjecttag().equals("REF")) {
+                             refObj.setobjecttag(roleOwner.getScopedName());
+                         }
+                         structQueue.add(new EmbeddedLinkWrapper(iomObj.getobjectoid(),sqlType,refObj,role));
+                     }
+                 }
+		     }
 		 }
 	}
 
@@ -1542,7 +1562,7 @@ public class TransferFromXtf {
 			    while(attri.hasNext()){
 			    	AttributeDef lineattr=(AttributeDef)attri.next();
 					valuei = recConv.addAttrValue(iomObj, ili2sqlName.mapItfGeometryAsTable((Viewable)attrDef.getContainer(),attrDef,null), sqlId, sqlTableName,ps,
-							valuei, lineattr,null,null,new HashMap<String,String>(),null);
+							valuei, lineattr,lineattr,null,null,new HashMap<String,String>(),null);
 			    }
 			}
 
@@ -1874,7 +1894,7 @@ public class TransferFromXtf {
 		    Iterator attri = lineAttrTable.getAttributes ();
 		    while(attri.hasNext()){
 		    	AttributeDef lineattr=(AttributeDef)attri.next();
-			   sep = recConv.addAttrToInsertStmt(false,stmt, values, sep, lineattr,null,sqlTabName.getName());
+			   sep = recConv.addAttrToInsertStmt(false,stmt, values, sep, lineattr,lineattr,null,sqlTabName.getName());
 		    }
 		}
 		
@@ -1907,11 +1927,11 @@ public class TransferFromXtf {
 	 * @param sqltable viewable
 	 * @return insert statement
 	 */
-	private String getInsertStmt(boolean isUpdate,Viewable iomClass,ViewableWrapper sqltable,StructWrapper structEle){
+	private String getInsertStmt(boolean isUpdate,Viewable iomClass,ViewableWrapper sqltable,AbstractStructWrapper structEle){
 		Object key=null;
-		if(!createGenericStructRef && structEle!=null && sqltable.getExtending()==null){
-			ViewableWrapper parentTable=recConv.getViewableWrapper(structEle.getParentSqlType());
-			key=sqltable.getSqlTablename()+":"+iomClass.getScopedName(null)+":"+parentTable.getSqlTablename()+":"+structEle.getParentAttr();
+		if(!createGenericStructRef && structEle!=null && (structEle instanceof StructWrapper) && sqltable.getExtending()==null){
+			ViewableWrapper parentTable=recConv.getViewableWrapper(((StructWrapper) structEle).getParentSqlType());
+			key=sqltable.getSqlTablename()+":"+iomClass.getScopedName(null)+":"+parentTable.getSqlTablename()+":"+((StructWrapper) structEle).getParentAttr();
 		}else{
 			key=sqltable.getSqlTablename()+":"+iomClass.getScopedName(null);
 		}

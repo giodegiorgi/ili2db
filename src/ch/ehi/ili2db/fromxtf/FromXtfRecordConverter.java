@@ -20,6 +20,7 @@ import ch.ehi.basics.types.OutParam;
 import ch.ehi.ili2db.base.DbIdGen;
 import ch.ehi.ili2db.base.DbNames;
 import ch.ehi.ili2db.base.Ili2cUtility;
+import ch.ehi.ili2db.base.Ili2dbException;
 import ch.ehi.ili2db.base.IliNames;
 import ch.ehi.ili2db.converter.AbstractRecordConverter;
 import ch.ehi.ili2db.converter.ConverterException;
@@ -43,8 +44,10 @@ import ch.interlis.ili2c.metamodel.AssociationDef;
 import ch.interlis.ili2c.metamodel.AttributeDef;
 import ch.interlis.ili2c.metamodel.BlackboxType;
 import ch.interlis.ili2c.metamodel.CompositionType;
+import ch.interlis.ili2c.metamodel.Container;
 import ch.interlis.ili2c.metamodel.CoordType;
 import ch.interlis.ili2c.metamodel.Domain;
+import ch.interlis.ili2c.metamodel.Element;
 import ch.interlis.ili2c.metamodel.EnumerationType;
 import ch.interlis.ili2c.metamodel.LineType;
 import ch.interlis.ili2c.metamodel.NumericType;
@@ -76,12 +79,14 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 	private XtfidPool oidPool=null;
 	private HashMap tag2class=null;
 	private Integer defaultEpsgCode=null;
+    private Map<AttributeDef,EnumValueMap> enumCache=new HashMap<AttributeDef,EnumValueMap>();
+    private String dbSchema;
 	
 	public FromXtfRecordConverter(TransferDescription td1, NameMapping ili2sqlName,HashMap tag2class1,
 			Config config,
 			DbIdGen idGen1,SqlColumnConverter geomConv1,Connection conn1,String dbusr1,boolean isItfReader1,
 			XtfidPool oidPool1,TrafoConfig trafoConfig,	
-			Viewable2TableMapping class2wrapper1,String datasetName) {
+			Viewable2TableMapping class2wrapper1,String datasetName,String dbSchema) {
 		super(td1, ili2sqlName, config, idGen1,trafoConfig,class2wrapper1);
 		conn=conn1;
 		tag2class=tag2class1;
@@ -90,6 +95,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		this.geomConv=geomConv1;
 		isItfReader=isItfReader1;
 		this.datasetName=datasetName;
+		this.dbSchema=dbSchema;
 		today=new java.sql.Timestamp(System.currentTimeMillis());
 		try{
 			Integer srsid=geomConv.getSrsid(defaultCrsAuthority,defaultCrsCode,conn);
@@ -104,12 +110,14 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		}catch(ConverterException ex){
 			throw new IllegalArgumentException("failed to get srsid for "+defaultCrsAuthority+":"+defaultCrsCode+", "+ex.getLocalizedMessage());
 		}
-		defaultEpsgCode=TransferFromIli.parseEpsgCode(defaultCrsAuthority+":"+defaultCrsCode);
+		if(defaultCrsAuthority!=null && defaultCrsCode!=null) {
+	        defaultEpsgCode=TransferFromIli.parseEpsgCode(defaultCrsAuthority+":"+defaultCrsCode);
+		}
 		
 	}
 	public void writeRecord(long basketSqlId, java.util.Map<String,String> genericDomains,IomObject iomObj,Viewable iomClass,
-			StructWrapper structEle, ViewableWrapper aclass, String sqlType,
-			long sqlId, boolean updateObj, PreparedStatement ps,ArrayList structQueue,Viewable originalClass)
+			AbstractStructWrapper structEle0, ViewableWrapper aclass, String sqlType,
+			long sqlId, boolean updateObj, PreparedStatement ps,ArrayList<AbstractStructWrapper> structQueue,Viewable originalClass)
 			throws SQLException, ConverterException {
 		int valuei=1;
 		
@@ -138,7 +146,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					valuei++;
 				}
 				// if class
-				if(structEle==null){
+				if(structEle0==null){
 					if(!updateObj){
 						if(!aclass.isStructure()){
 							if(createIliTidCol || aclass.getOid()!=null){
@@ -155,7 +163,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					}
 				}
 				// if struct, add ref to parent
-				if(structEle!=null){
+				if(structEle0!=null && (structEle0 instanceof StructWrapper)){
+				    StructWrapper structEle=(StructWrapper)structEle0;
 					ps.setLong(valuei, structEle.getParentSqlId());
 					valuei++;
 					if(createGenericStructRef){
@@ -172,30 +181,34 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 			}
 		}
  
-		HashSet attrs=getIomObjectAttrs(iomClass);
+		HashMap attrs=getIomObjectAttrs(iomClass);
 		Iterator<ColumnWrapper> iter = aclass.getAttrIterator();
 		while (iter.hasNext()) {
 		    ColumnWrapper columnWrapper=iter.next();
 			ViewableTransferElement obj = columnWrapper.getViewableTransferElement();
 			if (obj.obj instanceof AttributeDef) {
 				AttributeDef attr = (AttributeDef) obj.obj;
-				if(attrs.contains(attr)){
-					if(!attr.isTransient()){
-						Type proxyType=attr.getDomain();
-						if(proxyType!=null && (proxyType instanceof ObjectType)){
-							// skip implicit particles (base-viewables) of views
-						}else{
-							valuei = addAttrValue(iomObj, sqlType, sqlId, aclass.getSqlTablename(),ps,
-									valuei, attr,columnWrapper.getEpsgCode(),structQueue,genericDomains,originalClass);
-						}
-					}
-				}
+			   AttributeDef rootAttr=Ili2cUtility.getRootBaseAttr(attr);
+			   if(!attrs.containsKey(rootAttr)){
+			       ; // skip attrs that are not attrs of class of current object 
+			   }else {
+                if(!attr.isTransient()){
+                    Type proxyType=attr.getDomain();
+                    if(proxyType!=null && (proxyType instanceof ObjectType)){
+                        // skip implicit particles (base-viewables) of views
+                    }else{
+                        valuei = addAttrValue(iomObj, sqlType, sqlId, aclass.getSqlTablename(),ps,
+                                valuei, attr,(AttributeDef)attrs.get(rootAttr),columnWrapper.getEpsgCode(),structQueue,genericDomains,originalClass);
+                    }
+                }
+			   }
 			}
 			if(obj.obj instanceof RoleDef){
 				RoleDef role = (RoleDef) obj.obj;
-				if(role.getExtending()==null){
-					if(attrs.contains(role)){
-												
+				if(true) { // role.getExtending()==null){
+					if(!attrs.containsKey(role)){
+					    ; // role is not a property of class of current object
+					}else {						
 						 String refoid=null;
 						String roleName=role.getName();
 						// a role of an embedded association?
@@ -224,17 +237,31 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 								}
 							}
 						 }else{
-							 IomObject structvalue=iomObj.getattrobj(roleName,0);
-							 refoid=structvalue.getobjectrefoid();
-							 long orderPos=structvalue.getobjectreforderpos();
-							 if(orderPos!=0){
-								// refoid,orderPos
-								//ret.setStringAttribute(roleName, refoid);
-								//ret.setStringAttribute(roleName+".orderPos", Long.toString(orderPos));
-							 }else{
-								// refoid
-								//ret.setStringAttribute(roleName, refoid);
-							 }
+						     if(structEle0!=null) {
+						         EmbeddedLinkWrapper structEle=(EmbeddedLinkWrapper)structEle0;
+						         // role of an association that is embedded in XTF but has its on table in the db (because it has attributes)
+						         if(role==structEle.getTargetRole()) {
+						             refoid=structEle.getStruct().getobjectrefoid();
+						         }else {
+						             refoid=structEle.getParentXtfId();
+						         }
+						     }else {
+						         // role of a normal association
+                                 IomObject structvalue=iomObj.getattrobj(roleName,0);
+                                 refoid=structvalue.getobjectrefoid();
+                                 long orderPos=structvalue.getobjectreforderpos();
+                                 if(orderPos!=0){
+                                    // refoid,orderPos
+                                    //ret.setStringAttribute(roleName, refoid);
+                                    //ret.setStringAttribute(roleName+".orderPos", Long.toString(orderPos));
+                                 }else{
+                                    // refoid
+                                    //ret.setStringAttribute(roleName, refoid);
+                                 }
+						     }
+						     
+						     
+						     
 						 }
 						OutParam<Integer> valueiRef=new OutParam<Integer>(valuei);
 						setReferenceColumn(ps,role.getDestination(),refoid,valueiRef);
@@ -296,60 +323,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 				valuei.value++;
 		  }
 	}
-	public HashSet getIomObjectAttrs(Viewable aclass) {
-		HashSet ret=new HashSet();
-		Iterator iter = aclass.getAttributesAndRoles2();
-		while (iter.hasNext()) {
-		   ViewableTransferElement obj = (ViewableTransferElement)iter.next();
-		   if (obj.obj instanceof AttributeDef) {
-			   AttributeDef attr = (AttributeDef) obj.obj;
-				if(!attr.isTransient()){
-					Type proxyType=attr.getDomain();
-					if(proxyType!=null && (proxyType instanceof ObjectType)){
-						// skip implicit particles (base-viewables) of views
-					}else{
-						AttributeDef base=(AttributeDef) attr.getExtending();
-						while(base!=null){
-							attr=base;
-							base=(AttributeDef) attr.getExtending();
-						}
-						ret.add(attr);
-					}
-				}
-		   }
-		   if(obj.obj instanceof RoleDef){
-			   RoleDef role = (RoleDef) obj.obj;
-			   { // if(role.getExtending()==null)
-					// a role of an embedded association?
-					if(obj.embedded){
-						AssociationDef roleOwner = (AssociationDef) role.getContainer();
-						if(roleOwner.getDerivedFrom()==null){
-							RoleDef base=(RoleDef) role.getExtending();
-							while(base!=null){
-								role=base;
-								base=(RoleDef) role.getExtending();
-							}
-							ret.add(role);
-						}
-					 }else{
-							RoleDef base=(RoleDef) role.getExtending();
-							while(base!=null){
-								role=base;
-								base=(RoleDef) role.getExtending();
-							}
-							ret.add(role);
-					 }
-				}
-			}
-		}
-		return ret;
-	}
 	/** creates an insert statement for a given viewable.
 	 * @param sqlTableName table name of viewable
 	 * @param aclass viewable
 	 * @return insert statement
 	 */
-	public String createInsertStmt(boolean isUpdate,Viewable iomClass,DbTableName sqlTableName,ViewableWrapper aclass,StructWrapper structEle){
+	public String createInsertStmt(boolean isUpdate,Viewable iomClass,DbTableName sqlTableName,ViewableWrapper aclass,AbstractStructWrapper structEle0){
 		StringBuffer ret = new StringBuffer();
 		StringBuffer values = new StringBuffer();
 		//INSERT INTO table_name (column1,column2,column3,...)
@@ -415,7 +394,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					sep=",";
 				}
 				// if Class
-				if(!aclass.isStructure()){
+				if(structEle0==null){
 					if(!isUpdate){
 						if(createIliTidCol || aclass.getOid()!=null){
 							ret.append(sep);
@@ -427,7 +406,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 				}
 				// if STRUCTURE, add ref to parent
 				if(aclass.isStructure()){
-					if(structEle==null){
+					if(structEle0==null){
 						// struct is extended by a class and current object is an instance of the class
 					}else{
 						// current object is an instance of the structure
@@ -459,6 +438,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							sep=",";
 						}else{
 							ret.append(sep);
+							StructWrapper structEle=(StructWrapper)structEle0;
 							Viewable parentViewable=getViewable(structEle.getParentSqlType());
 							ViewableWrapper parentTable=getViewableWrapperOfAbstractClass((Viewable)structEle.getParentAttr().getContainer(),parentViewable);
 							ret.append(ili2sqlName.mapIliAttributeDefReverse(structEle.getParentAttr(),sqlTableName.getName(),parentTable.getSqlTablename()));
@@ -483,28 +463,34 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 			}
 		}
 		
-		HashSet attrs=getIomObjectAttrs(iomClass);
+		HashMap attrs=getIomObjectAttrs(iomClass);
 		Iterator<ColumnWrapper> iter = aclass.getAttrIterator();
 		while (iter.hasNext()) {
 		    ColumnWrapper columnWrapper=iter.next();
 		   ViewableTransferElement obj = columnWrapper.getViewableTransferElement();
 		   if (obj.obj instanceof AttributeDef) {
 			   AttributeDef attr = (AttributeDef) obj.obj;
-			   if(attrs.contains(attr)){
+			   AttributeDef rootAttr=Ili2cUtility.getRootBaseAttr(attr);
+			   if(!attrs.containsKey(rootAttr)){
+			       ; // skip attrs that are not attrs of class of current object 
+			   }else {
 					if(!attr.isTransient()){
 						Type proxyType=attr.getDomain();
 						if(proxyType!=null && (proxyType instanceof ObjectType)){
 							// skip implicit particles (base-viewables) of views
 						}else{
-							   sep = addAttrToInsertStmt(isUpdate,ret, values, sep, attr,columnWrapper.getEpsgCode(),sqlTableName.getName());
+							   sep = addAttrToInsertStmt(isUpdate,ret, values, sep, attr,(AttributeDef)attrs.get(rootAttr),columnWrapper.getEpsgCode(),sqlTableName.getName());
 						}
 					}
 			   }
 		   }
 		   if(obj.obj instanceof RoleDef){
 			   RoleDef role = (RoleDef) obj.obj;
-			   if(role.getExtending()==null){
-				   if(attrs.contains(role)){
+			   if(true) { //role.getExtending()==null){
+			       RoleDef rootRole=Ili2cUtility.getRootBaseRole(role);
+				   if(!attrs.containsKey(rootRole)){
+				       ; // skip roles, that are not part of class of current object
+				   }else {
 						ArrayList<ViewableWrapper> targetTables = getTargetTables(role.getDestination());
 						  for(ViewableWrapper targetTable : targetTables){
 								String roleName=ili2sqlName.mapIliRoleDef(role,sqlTableName.getName(),targetTable.getSqlTablename(),targetTables.size()>1);
@@ -622,8 +608,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		return aclass;
 	}
 	public String addAttrToInsertStmt(boolean isUpdate,
-			StringBuffer ret, StringBuffer values, String sep, AttributeDef attr,Integer epsgCode,String sqlTableName) {
-		if(attr.getExtending()==null){
+			StringBuffer ret, StringBuffer values, String sep, AttributeDef attr,AttributeDef classAttr,Integer epsgCode,String sqlTableName) {
+		if(true) { // attr.getExtending()==null){
 			Type type = attr.getDomainResolvingAliases();
 			String attrSqlName=ili2sqlName.mapIliAttributeDef(attr,epsgCode,sqlTableName,null);
 			if (attr.isDomainBoolean()) {
@@ -690,6 +676,15 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							values.append(","+geomConv.getInsertValueWrapperArray("?"));
 						}
 						sep=",";
+                }else if(TrafoConfigNames.JSON_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.JSON_TRAFO))){
+                    ret.append(sep);
+                    ret.append(attrSqlName);
+                       if(isUpdate){
+                           ret.append("="+geomConv.getInsertValueWrapperJson("?"));
+                       }else{
+                           values.append(","+geomConv.getInsertValueWrapperJson("?"));
+                       }
+                       sep=",";
 				}else if(TrafoConfigNames.MULTILINGUAL_TRAFO_EXPAND.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.MULTILINGUAL_TRAFO))){
 					for(String sfx:DbNames.MULTILINGUAL_TXT_COL_SUFFIXS){
 						ret.append(sep);
@@ -791,12 +786,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		return sep;
 	}
 	public int addAttrValue(IomObject iomObj, String sqlType, long sqlId,
-			String sqlTableName,PreparedStatement ps, int valuei, AttributeDef attr,Integer epsgCode,ArrayList structQueue,Map<String,String> genericDomains,Viewable originalClass)
+			String sqlTableName,PreparedStatement ps, int valuei, AttributeDef tableAttr,AttributeDef classAttr,Integer epsgCode,ArrayList<AbstractStructWrapper> structQueue,Map<String,String> genericDomains,Viewable originalClass)
 			throws SQLException, ConverterException {
-		if(attr.getExtending()==null){
-			 String attrName=attr.getName();
-			if( attr.isDomainBoolean()) {
-					String value=iomObj.getattrvalue(attrName);
+		if(true) { // attr.getExtending()==null){
+			 String attrName=tableAttr.getName();
+			if( tableAttr.isDomainBoolean()) {
+					String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 					if(value!=null){
 						if(value.equals("true")){
 							geomConv.setBoolean(ps,valuei,true);
@@ -807,8 +802,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						ps.setNull(valuei,Types.BIT);
 					}
 					valuei++;
-			}else if(attr.isDomainIliUuid()){
-				String value=iomObj.getattrvalue(attrName);
+			}else if(tableAttr.isDomainIliUuid()){
+				String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 				if(value==null){
 					 geomConv.setUuidNull(ps, valuei);
 				}else{
@@ -816,8 +811,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					 ps.setObject(valuei, toInsertUUID);
 				}
 				valuei++;
-			}else if( attr.isDomainIli1Date()) {
-				String value=iomObj.getattrvalue(attrName);
+			}else if( tableAttr.isDomainIli1Date()) {
+				String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 				if(value!=null){
 					GregorianCalendar gdate=new GregorianCalendar(Integer.parseInt(value.substring(0,4)),Integer.parseInt(value.substring(4,6))-1,Integer.parseInt(value.substring(6,8)));
 					java.sql.Date date=new java.sql.Date(gdate.getTimeInMillis());
@@ -826,8 +821,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					ps.setNull(valuei,Types.DATE);
 				}
 				valuei++;
-			}else if( attr.isDomainIli2Date()) {
-				String value=iomObj.getattrvalue(attrName);
+			}else if( tableAttr.isDomainIli2Date()) {
+				String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 				if(value!=null){
 					XMLGregorianCalendar xmldate;
 					try {
@@ -841,8 +836,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					ps.setNull(valuei,Types.DATE);
 				}
 				valuei++;
-			}else if( attr.isDomainIli2Time()) {
-				String value=iomObj.getattrvalue(attrName);
+			}else if( tableAttr.isDomainIli2Time()) {
+				String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 				if(value!=null){
 					XMLGregorianCalendar xmldate;
 					try {
@@ -856,8 +851,8 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					ps.setNull(valuei,Types.TIME);
 				}
 				valuei++;
-			}else if( attr.isDomainIli2DateTime()) {
-				String value=iomObj.getattrvalue(attrName);
+			}else if( tableAttr.isDomainIli2DateTime()) {
+				String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 				if(value!=null){
 					XMLGregorianCalendar xmldate;
 					try {
@@ -872,12 +867,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 				}
 				valuei++;
 			}else{
-				Type type = attr.getDomainResolvingAliases();
+				Type type = tableAttr.getDomainResolvingAliases();
 			 
 				if (type instanceof CompositionType){
-					 int structc=iomObj.getattrvaluecount(attrName);
-					if(TrafoConfigNames.CATALOGUE_REF_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.CATALOGUE_REF_TRAFO))){
-                        IomObject catref=iomObj.getattrobj(attrName,0);
+					 int structc= classAttr==null ? 0 : iomObj.getattrvaluecount(attrName);
+					if(TrafoConfigNames.CATALOGUE_REF_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.CATALOGUE_REF_TRAFO))){
+                        IomObject catref= classAttr==null ? null : iomObj.getattrobj(attrName,0);
                         String refoid=null;
                         if(catref!=null){
                             IomObject structvalue=catref.getattrobj(IliNames.CHBASE1_CATALOGUEREFERENCE_REFERENCE,0);
@@ -888,12 +883,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 	                    OutParam<Integer> valueiRef=new OutParam<Integer>(valuei);
 	                    setReferenceColumn(ps,getCatalogueRefTarget(type),refoid,valueiRef);
 	                    valuei=valueiRef.value;
-					}else if(TrafoConfigNames.MULTISURFACE_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.MULTISURFACE_TRAFO))){
-						 IomObject iomValue=iomObj.getattrobj(attrName,0);
+					}else if(TrafoConfigNames.MULTISURFACE_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.MULTISURFACE_TRAFO))){
+						 IomObject iomValue= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 						 IomObject iomMultisurface=null;
 						 MultiSurfaceMapping attrMapping=null;
 						 if(iomValue!=null){
-							 attrMapping=multiSurfaceAttrs.getMapping(attr);
+							 attrMapping=multiSurfaceAttrs.getMapping(tableAttr);
 							 int surfacec=iomValue.getattrvaluecount(attrMapping.getBagOfSurfacesAttrName());
 							 for(int surfacei=0;surfacei<surfacec;surfacei++){
 								 IomObject iomSurfaceStructure=iomValue.getattrobj(attrMapping.getBagOfSurfacesAttrName(), surfacei);
@@ -918,12 +913,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							geomConv.setSurfaceNull(ps,valuei);
 						 }
 						 valuei++;
-					}else if(TrafoConfigNames.MULTILINE_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.MULTILINE_TRAFO))){
-						 IomObject iomValue=iomObj.getattrobj(attrName,0);
+					}else if(TrafoConfigNames.MULTILINE_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.MULTILINE_TRAFO))){
+						 IomObject iomValue= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 						 IomObject iomMultiline=null;
 						 MultiLineMapping attrMapping=null;
 						 if(iomValue!=null){
-							 attrMapping=multiLineAttrs.getMapping(attr);
+							 attrMapping=multiLineAttrs.getMapping(tableAttr);
 							 int polylinec=iomValue.getattrvaluecount(attrMapping.getBagOfLinesAttrName());
 							 for(int polylinei=0;polylinei<polylinec;polylinei++){
 								 IomObject iomPolylineStructure=iomValue.getattrobj(attrMapping.getBagOfLinesAttrName(), polylinei);
@@ -945,12 +940,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							geomConv.setPolylineNull(ps,valuei);
 						 }
 						 valuei++;
-					}else if(TrafoConfigNames.MULTIPOINT_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.MULTIPOINT_TRAFO))){
-						 IomObject iomValue=iomObj.getattrobj(attrName,0);
+					}else if(TrafoConfigNames.MULTIPOINT_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.MULTIPOINT_TRAFO))){
+						 IomObject iomValue= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 						 IomObject iomMultipoint=null;
 						 MultiPointMapping attrMapping=null;
 						 if(iomValue!=null){
-							 attrMapping=multiPointAttrs.getMapping(attr);
+							 attrMapping=multiPointAttrs.getMapping(tableAttr);
 							 int pointc=iomValue.getattrvaluecount(attrMapping.getBagOfPointsAttrName());
 							 for(int pointi=0;pointi<pointc;pointi++){
 								 IomObject iomPointStructure=iomValue.getattrobj(attrMapping.getBagOfPointsAttrName(), pointi);
@@ -971,24 +966,45 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							geomConv.setCoordNull(ps,valuei);
 						 }
 						 valuei++;
-					}else if(TrafoConfigNames.ARRAY_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.ARRAY_TRAFO))){
-						 int valuec=iomObj.getattrvaluecount(attrName);
+					}else if(TrafoConfigNames.ARRAY_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.ARRAY_TRAFO))){
+						 int valuec= classAttr==null ? 0 : iomObj.getattrvaluecount(attrName);
 						 String iomArray[]=new String[valuec];
-						 ArrayMapping attrMapping=arrayAttrs.getMapping(attr);
+						 ArrayMapping attrMapping=arrayAttrs.getMapping(tableAttr);
+						 Type arrayElementType=attrMapping.getValueAttr().getDomainResolvingAliases();
 						 for(int elei=0;elei<valuec;elei++) {
 							 IomObject iomValue=iomObj.getattrobj(attrName,elei);
 							 String value=iomValue.getattrvalue(attrMapping.getValueAttr().getName());
+							 if((arrayElementType instanceof EnumerationType) && !attrMapping.getValueAttr().isDomainBoolean()) {
+							     if(createEnumColAsItfCode) {
+	                                 value=enumTypes.mapXtfCode2ItfCode((EnumerationType)arrayElementType, value);
+							     }else if(Config.CREATE_ENUM_DEFS_MULTI_WITH_ID.equals(createEnumTable)) {
+							         value=Long.toString(mapEnumValue(attrMapping.getValueAttr(),value));
+							     }
+							 }
 							 iomArray[elei]=value;
 						 }
 						 if(iomArray.length>0){
-							 Object geomObj = geomConv.fromIomArray(attrMapping.getValueAttr(),iomArray,enumTypes);
+							 Object geomObj = geomConv.fromIomArray(attrMapping.getValueAttr(),iomArray,createEnumColAsItfCode || Config.CREATE_ENUM_DEFS_MULTI_WITH_ID.equals(createEnumTable));
 							ps.setObject(valuei,geomObj);
 						 }else{
 							geomConv.setArrayNull(ps,valuei);
 						 }
 						 valuei++;
-					}else if(TrafoConfigNames.MULTILINGUAL_TRAFO_EXPAND.equals(trafoConfig.getAttrConfig(attr, TrafoConfigNames.MULTILINGUAL_TRAFO))){
-						 IomObject iomMulti=iomObj.getattrobj(attrName,0);
+                    }else if(TrafoConfigNames.JSON_TRAFO_COALESCE.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.JSON_TRAFO))){
+                        int valuec= classAttr==null ? 0 : iomObj.getattrvaluecount(attrName);
+                        IomObject iomValue[]=new IomObject[valuec];
+                        if(iomValue.length>0){
+                            for(int i=0;i<valuec;i++) {
+                                iomValue[i]=iomObj.getattrobj(attrName, i);
+                            }
+                            Object geomObj = geomConv.fromIomStructureToJson(tableAttr,iomValue);
+                           ps.setObject(valuei,geomObj);
+                        }else{
+                           geomConv.setJsonNull(ps,valuei);
+                        }
+                        valuei++;
+					}else if(TrafoConfigNames.MULTILINGUAL_TRAFO_EXPAND.equals(trafoConfig.getAttrConfig(tableAttr, TrafoConfigNames.MULTILINGUAL_TRAFO))){
+						 IomObject iomMulti= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 						for(String sfx:DbNames.MULTILINGUAL_TXT_COL_SUFFIXS){
 							 if(iomMulti!=null){
 								 	String value=getMultilingualText(iomMulti,sfx);
@@ -1006,12 +1022,12 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						 // enqueue struct values
 						 for(int structi=0;structi<structc;structi++){
 						 	IomObject struct=iomObj.getattrobj(attrName,structi);
-						 	String sqlAttrName=ili2sqlName.mapIliAttributeDef(attr,null,sqlTableName,null);
-						 	enqueStructValue(structQueue,sqlId,sqlType,sqlAttrName,struct,structi,attr);
+						 	String sqlAttrName=ili2sqlName.mapIliAttributeDef(tableAttr,null,sqlTableName,null);
+						 	enqueStructValue(structQueue,sqlId,sqlType,sqlAttrName,struct,structi,tableAttr);
 						 }
 					}
 				}else if (type instanceof PolylineType){
-					 IomObject value=iomObj.getattrobj(attrName,0);
+					 IomObject value= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 					 if(value!=null){
 						boolean is3D=((CoordType)((PolylineType)type).getControlPointDomain().getType()).getDimensions().length==3;
 						ps.setObject(valuei,geomConv.fromIomPolyline(value,epsgCode,is3D,getP((PolylineType)type)));
@@ -1022,7 +1038,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 				 }else if(type instanceof SurfaceOrAreaType){
 					 if(createItfLineTables){
 					 }else{
-						 IomObject value=iomObj.getattrobj(attrName,0);
+						 IomObject value= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 						 if(value!=null){
 								boolean is3D=((CoordType)((SurfaceOrAreaType)type).getControlPointDomain().getType()).getDimensions().length==3;
 							 Object geomObj = geomConv.fromIomSurface(value,epsgCode,((SurfaceOrAreaType)type).getLineAttributeStructure()!=null,is3D,getP((SurfaceOrAreaType)type));
@@ -1036,9 +1052,9 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						 if(type instanceof AreaType){
 							 IomObject value=null;
 							 if(isItfReader){
-								 value=iomObj.getattrobj(attrName,0);
+								 value= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 							 }else{
-								 value=iomObj.getattrobj(ItfReader2.SAVED_GEOREF_PREFIX+attrName,0);
+								 value= classAttr==null ? null : iomObj.getattrobj(ItfReader2.SAVED_GEOREF_PREFIX+attrName,0);
 							 }
 							 if(value!=null){
 								boolean is3D=((CoordType)((SurfaceOrAreaType)type).getControlPointDomain().getType()).getDimensions().length==3;
@@ -1050,9 +1066,9 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						 }
 					 }
 				 }else if(type instanceof CoordType){
-					 IomObject value=iomObj.getattrobj(attrName,0);
+					 IomObject value= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 					 if(value!=null){
-					    int actualEpsgCode=TransferFromIli.getEpsgCode(originalClass,attr, genericDomains, defaultEpsgCode);
+					    int actualEpsgCode=TransferFromIli.getEpsgCode(originalClass,tableAttr, genericDomains, defaultEpsgCode);
 					    if(actualEpsgCode==epsgCode) {
 	                        boolean is3D=((CoordType)type).getDimensions().length==3;
 	                        ps.setObject(valuei,geomConv.fromIomCoord(value,epsgCode,is3D));
@@ -1064,7 +1080,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					 }
 					 valuei++;
 				}else if(type instanceof NumericType){
-					String value=iomObj.getattrvalue(attrName);
+					String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 					if(type.isAbstract()){
 					}else{
 						PrecisionDecimal min=((NumericType)type).getMinimum();
@@ -1094,7 +1110,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						valuei++;
 					}
 				}else if(type instanceof EnumerationType){
-					String value=iomObj.getattrvalue(attrName);
+					String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 					if(createEnumColAsItfCode){
 						if(value!=null){
 							int itfCode=mapXtfCode2ItfCode((EnumerationType)type, value);
@@ -1103,11 +1119,19 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 							ps.setNull(valuei,Types.INTEGER);
 						}
 					}else{
-						if(value!=null){
-							ps.setString(valuei, value);
-						}else{
-							ps.setNull(valuei,Types.VARCHAR);
-						}
+		                if(Config.CREATE_ENUM_DEFS_MULTI_WITH_ID.equals(createEnumTable)) {
+	                        if(value!=null){
+	                            ps.setLong(valuei, mapEnumValue(classAttr,value));
+	                        }else{
+	                            ps.setNull(valuei,Types.BIGINT);
+	                        }
+		                }else {
+	                        if(value!=null){
+	                            ps.setString(valuei, value);
+	                        }else{
+	                            ps.setNull(valuei,Types.VARCHAR);
+	                        }
+		                }
 					}
 					valuei++;
 					if(createEnumTxtCol){
@@ -1119,7 +1143,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						valuei++;
 					}
 				}else if(type instanceof ReferenceType){
-					 IomObject structvalue=iomObj.getattrobj(attrName,0);
+					 IomObject structvalue= classAttr==null ? null : iomObj.getattrobj(attrName,0);
 					 String refoid=null;
 					 if(structvalue!=null){
 						 refoid=structvalue.getobjectrefoid();
@@ -1128,7 +1152,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 					setReferenceColumn(ps,((ReferenceType) type).getReferred(),refoid,valueiRef);
 					valuei=valueiRef.value;
 				}else if(type instanceof BlackboxType){
-					String value=iomObj.getattrvalue(attrName);
+					String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 					if(((BlackboxType)type).getKind()==BlackboxType.eXML){
 						if(value==null){
 							 geomConv.setXmlNull(ps, valuei);
@@ -1147,7 +1171,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 						valuei++;
 					}
 				}else{
-					String value=iomObj.getattrvalue(attrName);
+					String value= classAttr==null ? null : iomObj.getattrvalue(attrName);
 					if(value!=null){
 						ps.setString(valuei, value);
 					}else{
@@ -1159,7 +1183,19 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		}
 		return valuei;
 	}
-	protected AttributeDef getMultiPointAttrDef(Type type, MultiPointMapping attrMapping) {
+	private long mapEnumValue(AttributeDef attr, String xtfvalue) throws SQLException  {
+	    EnumValueMap map=null;
+	    if(enumCache.containsKey(attr)) {
+	        map=enumCache.get(attr);
+	    }else {
+	        OutParam<String> qualifiedIliName=new OutParam<String>();
+	        DbTableName sqlDbName=getEnumTargetTableName(attr, qualifiedIliName, dbSchema);
+	        map=EnumValueMap.createEnumValueMap(conn, colT_ID, true, qualifiedIliName.value, sqlDbName);
+            enumCache.put(attr,map);
+	    }
+        return map.mapXtfValue(xtfvalue);
+    }
+    protected AttributeDef getMultiPointAttrDef(Type type, MultiPointMapping attrMapping) {
 		Table multiPointType = ((CompositionType) type).getComponentType();
 		Table pointStructureType=((CompositionType) ((AttributeDef) multiPointType.getElement(AttributeDef.class, attrMapping.getBagOfPointsAttrName())).getDomain()).getComponentType();
 		AttributeDef coordAttr = (AttributeDef) pointStructureType.getElement(AttributeDef.class,attrMapping.getPointAttrName());
@@ -1259,7 +1295,7 @@ public class FromXtfRecordConverter extends AbstractRecordConverter {
 		typeCache.put(type,new Double(p));
 		return p;
 	}
-	private void enqueStructValue(ArrayList structQueue,long parentSqlId,String parentSqlType,String parentSqlAttr,IomObject struct,int structi,AttributeDef attr)
+	private void enqueStructValue(ArrayList<AbstractStructWrapper> structQueue,long parentSqlId,String parentSqlType,String parentSqlAttr,IomObject struct,int structi,AttributeDef attr)
 	{
 		structQueue.add(new StructWrapper(parentSqlId,parentSqlType,parentSqlAttr,struct,structi,attr));
 	}

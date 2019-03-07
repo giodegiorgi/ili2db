@@ -61,7 +61,7 @@ public class BlackBoxTypes23Test {
 	@Test
 	public void importIli() throws Exception
 	{
-		EhiLogger.getInstance().setTraceFilter(false);
+		//EhiLogger.getInstance().setTraceFilter(false);
 		Connection jdbcConnection=null;
 		try{
 		    Class driverClass = Class.forName("org.postgresql.Driver");
@@ -95,6 +95,22 @@ public class BlackBoxTypes23Test {
 					Assert.assertTrue(rs.next());
 					Assert.assertEquals("bytea",rs.getString("data_type"));
 				}
+                {
+                    // t_ili2db_attrname
+                    String [][] expectedValues=new String[][] {
+                        {"BlackBoxTypes23.Topic.ClassA.binbox", "binbox", "classa", null},
+                        {"BlackBoxTypes23.Topic.ClassA.xmlbox", "xmlbox", "classa", null}
+                        
+                    };
+                    Ili2dbAssert.assertAttrNameTable(jdbcConnection,expectedValues, DBSCHEMA);
+                }
+                {
+                    // t_ili2db_trafo
+                    String [][] expectedValues=new String[][] {
+                        {"BlackBoxTypes23.Topic.ClassA", "ch.ehi.ili2db.inheritance", "newClass"}
+                    };
+                    Ili2dbAssert.assertTrafoTable(jdbcConnection,expectedValues, DBSCHEMA);
+                }
 			}
 		}finally{
 			if(jdbcConnection!=null){
@@ -106,7 +122,7 @@ public class BlackBoxTypes23Test {
 	@Test
 	public void importXtf() throws Exception
 	{
-		EhiLogger.getInstance().setTraceFilter(false);
+		//EhiLogger.getInstance().setTraceFilter(false);
 		Connection jdbcConnection=null;
 		try{
 		    Class driverClass = Class.forName("org.postgresql.Driver");

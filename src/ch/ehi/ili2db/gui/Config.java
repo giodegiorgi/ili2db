@@ -1,5 +1,7 @@
 package ch.ehi.ili2db.gui;
 
+import java.util.Properties;
+
 import ch.ehi.basics.settings.Settings;
 import ch.ehi.sqlgen.generator.SqlConfiguration;
 
@@ -19,6 +21,7 @@ public class Config extends Settings {
 	public static final String CREATE_ENUM_DEFS_NO="no";
 	public static final String CREATE_ENUM_DEFS_SINGLE="singleTable";
 	public static final String CREATE_ENUM_DEFS_MULTI="multiTable";
+    public static final String CREATE_ENUM_DEFS_MULTI_WITH_ID="multiTableWithId";
 	public static final String CREATE_ENUM_COLS=PREFIX+".createEnumCols";
 	public static final String CREATE_ENUM_TXT_COL="addTxtCol";
 	public static final String CREATE_DATASET_COLS=PREFIX+".createDatasetCols";
@@ -47,6 +50,8 @@ public class Config extends Settings {
 	public static final String MULTIPOINT_TRAFO_COALESCE="coalesce";
 	public static final String ARRAY_TRAFO=PREFIX+".arrayTrafo";
 	public static final String ARRAY_TRAFO_COALESCE="coalesce";
+    public static final String JSON_TRAFO=PREFIX+".jsonTrafo";
+    public static final String JSON_TRAFO_COALESCE="coalesce";
 	public static final String MULTILINGUAL_TRAFO=PREFIX+".multilingualTrafo";
 	public static final String MULTILINGUAL_TRAFO_EXPAND="expand";
 	public static final String UNIQUE_CONSTRAINTS=PREFIX+".uniqueConstraints";
@@ -81,10 +86,17 @@ public class Config extends Settings {
 	public static final String USE_EPGS_IN_NAMES=PREFIX+".useEpsgInNames";
 	public static final String SRS_MODEL_ASSIGNMENT=PREFIX+".srsModelAssignment";
 	public static final String MODELS_TAB_MODELNAME_COLSIZE = PREFIX+".modelsTabModelnameColSize";
-	private int function;
+    public static final String ATTRNAME_TAB_SQLNAME_COLSIZE = PREFIX+".attrTabSqlnameColSize";
+    public static final String ATTRNAME_TAB_OWNER_COLSIZE = PREFIX+".attrTabOwnerColSize";
+    public static final String CLASSNAME_TAB_ILINAME_COLSIZE = PREFIX+".classnameTabIlinameColSize";
+    public static final String INHERIT_TAB_THIS_COLSIZE = PREFIX+".inheritTabThisColSize";
+	public static final String CREATE_TYPE_CONSTRAINT=PREFIX+".createTypeConstraint";
+	private int function=FC_UNDEFINED;
 	private String dburl;
 	private String dbusr;
 	private String dbpwd;
+	private Properties dbprops=null;
+    private String dbparams=null;
 	private String dbhost;
 	private String dbport;
 	private String dbdatabase;
@@ -124,12 +136,15 @@ public class Config extends Settings {
     private String domainAssignments=null;
 	final static public String ILIGML20="ILIGML20"; 
 	
-	static public final int FC_IMPORT=0;
-	static public final int FC_SCHEMAIMPORT=1;
-	static public final int FC_EXPORT=2;
-	static public final int FC_UPDATE=3;
-	static public final int FC_DELETE=4;
-	static public final int FC_REPLACE=5;
+    static public final int FC_UNDEFINED=0;
+	static public final int FC_IMPORT=1;
+	static public final int FC_SCHEMAIMPORT=2;
+	static public final int FC_EXPORT=3;
+	static public final int FC_UPDATE=4;
+	static public final int FC_DELETE=5;
+	static public final int FC_REPLACE=6;
+    static public final int FC_SCRIPT=7;
+    static public final int FC_VALIDATE=8;
 	public String getIdGenerator() {
 		return idGenerator;
 	}
@@ -172,6 +187,12 @@ public class Config extends Settings {
 	public void setDbusr(String dbusr) {
 		this.dbusr = dbusr;
 	}
+    public Properties getDbProperties() {
+        return dbprops;
+    }
+    public void setDbProperties(Properties props) {
+        this.dbprops=props;
+    }
 	public String getDropscript() {
 		return dropscript;
 	}
@@ -226,10 +247,16 @@ public class Config extends Settings {
 	public void setFunction(int function) {
 		this.function = function;
 	}
+    public String getDbParams() {
+        return dbparams;
+    }
+    public void setDbParams(String propFile) {
+        this.dbparams = propFile;
+    }
 	public String getDbfile() {
 		return dbfile;
 	}
-	public void setDbfile(String dbfile) {
+    public void setDbfile(String dbfile) {
 		this.dbfile = dbfile;
 	}
 	public String getDbhost() {
@@ -396,6 +423,12 @@ public class Config extends Settings {
 	public void setArrayTrafo(String value) {
 		setValue(ARRAY_TRAFO,value);
 	}
+    public String getJsonTrafo() {
+        return getValue(JSON_TRAFO);
+    }
+    public void setJsonTrafo(String value) {
+        setValue(JSON_TRAFO,value);
+    }
 	public String getMultilingualTrafo() {
 		return getValue(MULTILINGUAL_TRAFO);
 	}
@@ -641,6 +674,7 @@ public class Config extends Settings {
     public boolean isImportBid() {
         return importBid;
     }
+
     public void setUseEpsgInNames(boolean value) {
         setValue(USE_EPGS_IN_NAMES,value?TRUE:FALSE);
     }
@@ -659,4 +693,10 @@ public class Config extends Settings {
     public String getSrsModelAssignment() {
         return getValue(SRS_MODEL_ASSIGNMENT);
     }
+    public void setCreateTypeConstraint(boolean value) {
+		setValue(CREATE_TYPE_CONSTRAINT,value?TRUE:FALSE);
+	}
+	public boolean getCreateTypeConstraint() {
+		return TRUE.equals(getValue(CREATE_TYPE_CONSTRAINT))?true:false;
+	}
 }

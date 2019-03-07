@@ -45,7 +45,6 @@ public abstract class AbstractMain {
 		config.setModeldir(Ili2db.ILI_FROM_DB+ch.interlis.ili2c.Main.ILIDIR_SEPARATOR+Ili2db.XTF_DIR+ch.interlis.ili2c.Main.ILIDIR_SEPARATOR+ch.interlis.ili2c.Main.ILI_REPOSITORY+ch.interlis.ili2c.Main.ILIDIR_SEPARATOR+Ili2db.JAR_DIR);
 		config.setModels(Ili2db.XTF);
 		config.setDefaultSrsAuthority("EPSG");
-		config.setDefaultSrsCode("21781");
 		config.setMaxSqlNameLength(Integer.toString(NameMapping.DEFAULT_NAME_LENGTH));
 		config.setIdGenerator(ch.ehi.ili2db.base.TableBasedIdGen.class.getName());
 		config.setInheritanceTrafo(config.INHERITANCE_TRAFO_SMART1);
@@ -54,6 +53,7 @@ public abstract class AbstractMain {
 		config.setMultiLineTrafo(Config.MULTILINE_TRAFO_COALESCE);
 		config.setMultiPointTrafo(Config.MULTIPOINT_TRAFO_COALESCE);
 		config.setArrayTrafo(Config.ARRAY_TRAFO_COALESCE);
+        config.setJsonTrafo(Config.JSON_TRAFO_COALESCE);
 		config.setMultilingualTrafo(Config.MULTILINGUAL_TRAFO_EXPAND);
 		config.setValidation(true);
 	}
@@ -119,6 +119,9 @@ public abstract class AbstractMain {
 			}else if(arg.equals("--gui")){
 				doGui=true;
 				argi++;
+            }else if(arg.equals("--validate")){
+                config.setFunction(Config.FC_VALIDATE);
+                argi++;
 			}else if(arg.equals("--import")){
 				config.setFunction(Config.FC_IMPORT);
 				argi++;
@@ -151,6 +154,10 @@ public abstract class AbstractMain {
 			}else if(arg.equals("--trace")){
 				EhiLogger.getInstance().setTraceFilter(false); 
 				argi++;
+            }else if(arg.equals("--dbparams")){
+                argi++;
+                config.setDbParams(args[argi]);
+                argi++;
 			}else if(arg.equals("--dropscript")){
 				argi++;
 				config.setDropscript(args[argi]);
@@ -209,6 +216,9 @@ public abstract class AbstractMain {
 			}else if(arg.equals("--createEnumTabs")){
 				argi++;
 				config.setCreateEnumDefs(config.CREATE_ENUM_DEFS_MULTI);
+            }else if(arg.equals("--createEnumTabsWithId")){
+                argi++;
+                config.setCreateEnumDefs(config.CREATE_ENUM_DEFS_MULTI_WITH_ID);
 			}else if(arg.equals("--createEnumTxtCol")){
 				argi++;
 				config.setCreateEnumCols(config.CREATE_ENUM_TXT_COL);
@@ -242,6 +252,9 @@ public abstract class AbstractMain {
 			}else if(arg.equals("--coalesceArray")){
 				argi++;
 				config.setArrayTrafo(config.ARRAY_TRAFO_COALESCE);
+            }else if(arg.equals("--coalesceJson")){
+                argi++;
+                config.setJsonTrafo(config.JSON_TRAFO_COALESCE);
 			}else if(arg.equals("--expandMultilingual")){
 				argi++;
 				config.setMultilingualTrafo(config.MULTILINGUAL_TRAFO_EXPAND);
@@ -355,7 +368,10 @@ public abstract class AbstractMain {
 			}else if(arg.equals("--iliMetaAttrs")){
 				argi++;	
 				config.setIliMetaAttrsFile(args[argi]);
-				argi++;	
+				argi++;
+            }else if(arg.equals("--createTypeConstraint")){
+                argi++;
+                config.setCreateTypeConstraint(true);
 			}else if(arg.equals("--help")){
 					printVersion ();
 					System.err.println();
@@ -373,6 +389,7 @@ public abstract class AbstractMain {
 					System.err.println("--schemaimport         do an schema import.");
 					System.err.println("--preScript file       before running a function, run a script.");
 					System.err.println("--postScript file      after running a function, run a script.");
+                    System.err.println("--dbparams file        config file with connection parameters.");
 					printConnectOptions();
 					System.err.println("--validConfig file     Config file for validation.");
 					System.err.println("--disableValidation    Disable validation of data.");
@@ -380,7 +397,7 @@ public abstract class AbstractMain {
 					System.err.println("--forceTypeValidation  restrict customization of validation related to \"multiplicity\"");
 					System.err.println("--deleteData           on schema/data import, delete existing data from existing tables.");
 					System.err.println("--defaultSrsAuth  auth Default SRS authority "+config.getDefaultSrsAuthority());
-					System.err.println("--defaultSrsCode  code Default SRS code "+config.getDefaultSrsCode());
+					System.err.println("--defaultSrsCode  code Default SRS code");
                     System.err.println("--multiSrs             create a DB schema that supports multiple SRS codes");
                     System.err.println("--domains genericDomain=concreteDomain overrides the generic domain assignments on export");
                     System.err.println("--altSrsModel originalSrsModel=alternativeSrsModel assigns a model with an alternative SRS (but same structure as orinal model)");
@@ -399,18 +416,20 @@ public abstract class AbstractMain {
 					System.err.println("--coalesceMultiLine    enable smart mapping of CHBase:MultiLine");
 					System.err.println("--coalesceMultiPoint   enable smart mapping of MultiPoint structures");
 					System.err.println("--coalesceArray        enable smart mapping of ARRAY structures");
+                    System.err.println("--coalesceJson         enable smart mapping of JSON structures");
 					System.err.println("--expandMultilingual   enable smart mapping of CHBase:MultilingualText");
 					System.err.println("--createGeomIdx        create a spatial index on geometry columns.");
 					System.err.println("--createEnumColAsItfCode create enum type column with value according to ITF (instead of XTF).");
 					System.err.println("--createEnumTxtCol     create an additional column with the text of the enumeration value.");
-					System.err.println("--createEnumTabs       generate tables with enum definitions.");
+					System.err.println("--createEnumTabs       generate tables for enum definitions and use xtfcode to reference entries in generated enum tables.");
+                    System.err.println("--createEnumTabsWithId generate tables with "+DbNames.T_ID_COL+" for enum definitions and use ids to reference entries in generated enum tables.");
 					System.err.println("--createSingleEnumTab  generate all enum definitions in a single table.");
 					System.err.println("--beautifyEnumDispName replace underscore with space in dispName of enum table entries");
 					System.err.println("--createStdCols        generate "+DbNames.T_USER_COL+", "+DbNames.T_CREATE_DATE_COL+", "+DbNames.T_LAST_CHANGE_COL+" columns.");
 					System.err.println("--t_id_Name name       change name of t_id column ("+DbNames.T_ID_COL+")");
 					System.err.println("--idSeqMin minValue    sets the minimum value of the id sequence generator.");
 					System.err.println("--idSeqMax maxValue    sets the maximum value of the id sequence generator.");
-					System.err.println("--createTypeDiscriminator  generate always a type discriminaor colum.");
+					System.err.println("--createTypeDiscriminator  generate always a type discriminator column.");
 					System.err.println("--structWithGenericRef  generate one generic reference to parent in struct tables.");
 					System.err.println("--disableNameOptimization disable use of unqualified class name as table name.");
 					System.err.println("--nameByTopic          use topic+class name as table name.");
@@ -436,6 +455,7 @@ public abstract class AbstractMain {
 					System.err.println("--translation translatedModel=originModel assigns a translated model to its orginal language equivalent.");
 					System.err.println("--createMetaInfo       Create aditional ili-model information.");
 					System.err.println("--iliMetaAttrs file    Import meta-attributes from a .toml file (Requires --createMetaInfo)");
+                    System.err.println("--createTypeConstraints   Create CHECK constraint on t_type columns.");
 					printSpecificOptions();
 					System.err.println("--proxy host           proxy server to access model repositories.");
 					System.err.println("--proxyPort port       proxy port to access model repositories.");
@@ -457,6 +477,11 @@ public abstract class AbstractMain {
 				break;
 			}
 		}
+		if(config.getFunction()==Config.FC_UNDEFINED) {
+		    if(config.getCreatescript()!=null || config.getDropscript()!=null) {
+                config.setFunction(Config.FC_SCRIPT);
+		    }
+		}
 		if(argi+1==args.length){
 			String xtfFilename=args[argi];
 			config.setXtffile(xtfFilename);
@@ -468,9 +493,13 @@ public abstract class AbstractMain {
 			ch.ehi.ili2db.gui.MainWizard.main(config,getAPP_HOME(),getAPP_NAME(),getDbPanelDescriptor(),getDbUrlConverter());
 			Ili2db.writeAppSettings(settings);
 		}else{
-			config.setDburl(getDbUrlConverter().makeUrl(config));
+		    if(config.getFunction()!=Config.FC_SCRIPT) {
+	            config.setDburl(getDbUrlConverter().makeUrl(config));
+		    }
 			try {
-				Ili2db.readSettingsFromDb(config);
+	            if(config.getFunction()!=Config.FC_SCRIPT) {
+	                Ili2db.readSettingsFromDb(config);
+	            }
 				Ili2db.run(config,getAPP_HOME());
 			} catch (Exception ex) {
 				EhiLogger.logError(ex);
